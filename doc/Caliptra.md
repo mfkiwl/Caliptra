@@ -262,7 +262,7 @@ Attacker profile is the outcome of following factors like tools accessible to th
 
 |**Proficiency level**|**Definition**|**Detailed definition**|
 | :--------- | :--------- | :--------- |
-| **Expert** | <p>Can use chip invasive, fault injections, side channel and logical tools</p><p>Understands HW and SW in depth</p><p>Familiar with implemention</p><p><ul><li>Algorithms</li><li>Protocols</li><li>HW structures</li><li>Principle and security concepts</li></ul></p> | <ul><li>Familiar with developers knowledge namely algorithms, protocols, hardware structure, principles</li><li>Techniques and tools for attacks</li></ul> |
+| **Expert** | <p>Can use chip invasive, fault injections, side channel and logical tools</p><p>Understands HW and SW in depth</p><p>Familiar with implementation</p><p><ul><li>Algorithms</li><li>Protocols</li><li>HW structures</li><li>Principle and security concepts</li></ul></p> | <ul><li>Familiar with developers knowledge namely algorithms, protocols, hardware structure, principles</li><li>Techniques and tools for attacks</li></ul> |
 | **Proficient** |<p>Can use fault injections, side channel and logical tools</p><p>Understands HW and SW in reasonably</p><p>Familiar with security behavior</p> | Familiar with  security behavior, classical attacks |
 | **Laymen** | No particular expertise | No particular expertise |
 
