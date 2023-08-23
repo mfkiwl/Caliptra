@@ -38,6 +38,7 @@ The Caliptra Workgroup acknowledges the following individuals for their contribu
 * Sudhir Mathane (AMD)
 * Varun Sampath (NVIDIA)
 * Vishal Soni (Microsoft)
+* Steven Bellock (NVIDIA)
 
 <div style="page-break-after: always"></div>
 
@@ -58,8 +59,11 @@ The Caliptra Workgroup acknowledges the following individuals for their contribu
 |November 2022|0.58|Rob Strong (AMD)|In section ‘Caliptra RTM hitless update’, added a definition for ‘hitless’.|
 |January 2023|0.59|Jeff Andersen|Added commentary on LDevID and field entropy; added owner authz fuse details.|
 |January 2023|0.60|Jeff Andersen|Added additional details on hitless update attestation.|
-|January 2023|0.61|Jeff Andersen|Removed KEY MANIFEST SVN from spec.|
-|February 2023|0.62|Piotr Kwidzinski|Moved spec to Caliptra GitHub repo.|
+|January 2023|0.61|Jeff Andersen|Removed KEY MANIFEST SVN from specification.|
+|February 2023|0.62|Piotr Kwidzinski|Moved specification to Caliptra GitHub repo.|
+|February 2023|0.62|Piotr Kwidzinski|Moved specification to Caliptra GitHub repo.|
+|May 2023|0.63|Caleb Whitehead|Updated Error Reporting and Handling HW Error Table.|
+|June 2023|0.64|Varun Sampath (NVIDIA)|Warm reset and journey measurement handling.|
 
 # Acronyms and Abbreviations
 
@@ -513,8 +517,8 @@ See [HW Section](#hardware-section) for a detailed discussion.
 
 Caliptra supports two physical modes of instantiation, the Caliptra Core and the Caliptra Subsystem.  Within Caliptra Core there are two modes of integration with different security postures and firmware loading techniques.
 
-1. Boot Media Integrated (BMI) Profile (formerly Active Profile): Caliptra loads its firmware directly from SPI boot media. SoC boot cannot proceed through any other boot media.
-2. Boot Media Dependent (BMD) Profile (formerly Passive Profile): Caliptra receives its firmware from SoC actors with access to the boot media.
+1. Boot Media Integrated (BMI) Profile: Caliptra loads its firmware directly from SPI boot media. SoC boot cannot proceed through any other boot media.
+2. Boot Media Dependent (BMD) Profile: Caliptra receives its firmware from SoC actors with access to the boot media.
 
 In both Profiles, Caliptra is among the first uncore microcontrollers taken out of reset by the power-on reset logic. The difference is in the TCB for integrity of the Core Root of Trust for Measurement. In the BMI Profile, this TCB is the Caliptra Core. In the BMD Profile, this TCB additionally includes the immutable element of the SoC ROM. The BMD Profile trades increased TCB for lower integration cost. BMD Profile does not put Caliptra firmware in the performance-critical or recovery-critical code paths of the SoC boot process.
 
@@ -652,7 +656,7 @@ Note that the owner key, when represented in fuses or in the FMC's alias certifi
 4. SOC will follow the boot flow as defined in Caliptra IP HW boot flow to assert cptra\_pwrgood and deassert cptra\_rst\_b, followed by writing to the fuse registers.
 5. HVM through JTAG or using Caliptra SOC interface writes to “CPTRA\_DBG\_MANUF\_SERVICE\_REG” requesting for a CSR (refer to the ROM/FW specification for bit definitions)
 6. HVM through JTAG or using Caliptra SOC interface writes to “CPTRA\_BOOTFSM\_GO” to allow Caliptra’s internal BootFSM to continue to bring up uController out of reset
-7. ROM will look at the manufacturing state encoding, “CPTRA\_DBG\_MANUF\_SERVICE\_REG” and populates the Caliptra internal SRAM \[MB SRAM hardware structure is reused\] with the CSR and CSR envelope signature and write to Caliptra internal register to indicate CSR is valid (refer to Caliptra ROM spec and Identity section in this document on the ROM steps to generate the CSR)
+7. ROM will look at the manufacturing state encoding, “CPTRA\_DBG\_MANUF\_SERVICE\_REG” and populates the Caliptra internal SRAM \[MB SRAM hardware structure is reused\] with the CSR and CSR envelope signature and write to Caliptra internal register to indicate CSR is valid (refer to Caliptra ROM specification and Identity section in this document on the ROM steps to generate the CSR)
 8. HVM through JTAG or using SOC interface polls for “requested service\[s\]” bit\[s\] available in “CPTRA\_BOOT\_STATUS” register.
 9. HVM through JTAG reads mbox\_status\[3:0\] to check if the data is ready to be read (DATA\_READY encoding).
 10. HVM must write a bit in CPTRA\_DBG\_MANUF\_SERVICE\_REG over JTAG that it has completed reading CSR
@@ -851,7 +855,7 @@ To capture all firmware and configuration changes, Caliptra tracks and attests t
 
 The log and cumulative measurement mechanism is similar to that used in TPM.  In this model, Caliptra only needs to securely manage the measurements; the log does not need to be secured or maintained by Caliptra or the SoC.  The construction of measurements through cryptographic hash extensions means the log must provide the exact order and evidence needed to reconstruct the measurement.  As such, the log is tamper evident by design and does not need to be kept secure.
 
-Caliptra contains \[32\] PCR 384 banks that are extendible by the SHA engine, and readable by Caliptra firmware.  The usage of the PCR Banks is as follows:
+Caliptra contains 32 PCR 384 banks that are extendable by the SHA engine, and readable by Caliptra firmware.  The usage of the PCR Banks is as follows:
 
 *Table 9: PCR Bank Usage*
 
@@ -868,7 +872,7 @@ Caliptra contains \[32\] PCR 384 banks that are extendible by the SHA engine, an
 |PCR8|Cumulative|RT - PA3||
 |…|-|-||
 
-## Attestation of Caliptra's update journey
+### Attestation of Caliptra's update journey
 
 The Caliptra hardware ROM will extend Caliptra's FMC measurement and security state into the cumulative and current PCR banks (0 and 1 respectively).  The FMC captures the current measurement of Caliptra's Runtime Firmware upon every cold boot and hitless update. These measurements are used to derive a CDI and an alias key given to runtime firmware. FMC places runtime firmware's measurements into runtime firmware's alias key certificate, and signs that certificate with FMC's alias key.
 
@@ -916,7 +920,7 @@ Thus satisfied that version B has never run since power-on, the verifier can als
 
 Finally, the verifier can confirm freshness by comparing the nonce in (6) to the one emitted in the original challenge. As DPE will only allow a derived leaf key to be used if the measurements present in its leaf certificate are a reflection of the current state, the fact that the freshness nonce was signed by DPE is evidence that the measurements in (4) are fresh.
 
-### Commentary: maintaining sealed secrets across a power cycle
+#### Commentary: maintaining sealed secrets across a power cycle
 
 Caliptra does not seal secrets directly. However, Caliptra does implement DPE, which allows secrets to be sealed to an external sealer such as a TPM, with a policy that only allows those secrets to be unsealed if Caliptra allows the host to wield a particular leaf DPE key. This leaf DPE key is permuted based on the hitless update journey of the various components whose measurements are stored within Caliptra.
 
@@ -927,6 +931,19 @@ Let us assume that upon each hitless update, the firmware update is also written
 To anticipate this eventuality, before a power cycle the SoC can instruct DPE to predict what the DPE leaf public key will be if the microcode journey is simply \[C\], using DPE's simulation context. The SoC can then re-seal secrets to the external sealer with a policy that can be satisfied if the computed public key is used.
 
 Note: as all DPE leaf keys are derived using Caliptra runtime firmware's CDI, a DPE simulation context cannot predict the leaf key that would be available if a different Caliptra firmware image were to boot (as one Caliptra firmware image does not have access to a different image's CDI). Therefore, if a different Caliptra firmware image is staged to persistent storage, Caliptra must first be hitlessly updated to that image before a simulation context can be used to predict public keys that will be available to that image on next cold-boot.
+
+### Attestation of SoC update journey
+
+Caliptra shall also attest to the journeys of SoC components. A SoC component's journey may change independently of other components. For example, SoC components may implement partial resets or hitless updates that cause the component's firmware or configuration to reload.
+
+Caliptra shall maintain a reboot counter for each component. Caliptra shall increment the reboot counter and update the journey measurement for calls that indicate that the component's state changed. Caliptra  shall attest the journey measurement and report the counter value on-demand. The verifier is assumed to have knowledge of update events at an associated reboot counter (via an event log) but not have knowledge of reset events. The verifier can compute the journey measurement via multiplicatively extending the current measurement by the reset counter. For example:
+1. Upon cold boot, SoC component boots firmware A. Reboot counter is 0. The tuple of (0,A) is in the event log.
+2. SoC component is partial reset once. Reboot counter is 1.
+3. SoC component is hitlessly updated to firmware B. Reboot counter is 2. The tuple of (2,B) is in the event log.
+4. SoC component is partial reset twice. Reboot counter is 4.
+   
+The corresponding journey measurement computation is the chained extension of \[A->A->B->B->B\]. The verifier can ascertain this through the two event log entries.
+
 
 ## Anti-rollback Support
 
@@ -1091,10 +1108,7 @@ Caliptra IP HW Boot Flow
 4. Caliptra IP will now evaluate the strap settings driven through various interface wires (eg. BMD vs BMI mode, security/debug state of the SOC etc)
 5. If SOC is in a debug mode, then security assets are cleared/switched to debug mode
 6. Caliptra IP will assert Ready\_For\_Fuse wire to the SOC
-7. SOC will populate the fuse registers and set a fuse write done bit in the same fuse register block. Note that Caliptra HW drops writes to any registers that cannot be changed unless there is a power cycle (eg. UDS). So SOC is free to write all the registers.
-
-	a. **Open:** To reduce the overall complexity, there is a proposal to write a SOC generated random number as a part of fuse population. From there, FW will implement DRBG using DRNG as a starting point.
-
+7. SOC will populate the fuse registers, the internal TRNG configuration registers, and the ROM WDT cycle count, then set the CPTRA\_FUSE\_WR\_DONE bit. Note that Caliptra HW drops writes to any registers that cannot be changed unless there is a power cycle (eg. UDS). So SOC is free to write all the registers.
 8. Caliptra IP will deassert Ready\_for\_Fuse wire as soon as the fuse write done register is written.
 9. Caliptra IP moves security critical assets in fuse registers (eg. UDS) to Key Vault.
 
@@ -1111,13 +1125,13 @@ Caliptra IP HW Boot Flow
 3. Caliptra ROM will assert READY\_FOR\_FW wire. This is done by writing an internal register. This register is also visible to read on the APB interface. SOC can choose to poll on this bit instead of using the wire (it is SOC integration choice).
 4. SOC will follow the mailbox protocol and push Caliptra FW into the mailbox
 5. Caliptra’s mailbox HW will assert an interrupt to the uController once the GO is written per mailbox protocol. See [Mailbox](#mailbox) for specifics.
-6. Once Caliptra’s FW is authenticated and loaded into ICCM, uController will assert READY\_FOR\_RTFLOWS wire. Refer to ROM and FW spec on next level specifics of various security flows that happen within this step (eg. DICE).
+6. Once Caliptra’s FW is authenticated and loaded into ICCM, uController will assert READY\_FOR\_RTFLOWS wire. Refer to ROM and FW specification on next level specifics of various security flows that happen within this step (eg. DICE).
 
 ## SOC FW Authentication flows
 
 Caliptra provides FW authentication and measurement capture service to the SOC.
 
-1. SOC logic (ROM or HW or FW \[depending on the context of the flow\]) provides the SOC FW hash manifest for authentication. SOC hash manifest is signed using the same key as the Caliptra FW. Format of the SOC hash manifest contains global meta data of “Impactless” field, “FWID” and the “Associated Hash”. Please see Caliptra FW spec for more details.
+1. SOC logic (ROM or HW or FW \[depending on the context of the flow\]) provides the SOC FW hash manifest for authentication. SOC hash manifest is signed using the same key as the Caliptra FW. Format of the SOC hash manifest contains global meta data of “Impactless” field, “FWID” and the “Associated Hash”. See Caliptra FW specification for more details.
 2. For SOC FW/Configuration that requires verification, there are two options:
 	1. SOC logic uses the Caliptra provided SHA384 HW API to stream the FW while copying the same to the appropriate destination; SOC logic will write the “FW ID” and send a FW authentication request mailbox command.
 	2. SOC logic can directly report the measurement. SOC logic will write the “FW ID”, Measurement and send a FW measurement mailbox command.
@@ -1141,7 +1155,7 @@ Notes:
 
 1. Once Caliptra uController is out of reset, ROM starts executing and triggers the crypto block to run the UDS decrypt flow.
 2. Caliptra ROM will use the internal SPI peripheral to read from the platform's persistent storage and load the FW. Note that SPI will be operating in basic functional single-IO mode and at 20 MHz frequency.
-3. Once Caliptra’s FW is authenticated and loaded into ICCM, uController will assert READY\_FOR\_RTFLOWS wire. Refer to ROM and FW spec on next level specifics of various security flows that happen within this step (eg. DICE).
+3. Once Caliptra’s FW is authenticated and loaded into ICCM, uController will assert READY\_FOR\_RTFLOWS wire. Refer to ROM and FW specification on next level specifics of various security flows that happen within this step (eg. DICE).
 
 ### <a id="reset-flow"></a>CPU Warm Reset or PCIe Hot Reset Flow →  Caliptra IP reset
 
@@ -1154,8 +1168,10 @@ Notes:
 1. Caliptra IP’s reset is asserted by the SOC
 2. Caliptra’s internal BootFSM will reset the uController and then resets all the logic (including the SOC facing APB interface). Only registers or flops that are sitting on powergood are left to have the same value. Note that SRAMs do not have a reset.
 3. Caliptra IP’s reset is de-asserted by the SOC
-4. At this point the HW boot flow will be the same cold boot flow
-5. Caliptra’s ROM reads an internal register to differentiate b/w warm vs cold vs impactless flow. If it's a warm reset flow, then it skips DICE key gen, FW load flows (because keys were already derived and FW is already present in ICCM). This is an important reset time optimization for devices that need to meet the hot reset spec time.
+4. At this point the HW boot flow will be the same cold boot flow. SoC is required to configure the internal TRNG and ROM WDT and then set CPTRA\_FUSE\_WR\_DONE. This will cause Caliptra IP to deassert the Ready\_for\_Fuse wire.
+5. Caliptra’s ROM reads an internal register to differentiate b/w warm vs cold vs impactless flow. If it's a warm reset flow, then it skips DICE key gen, FW load flows (because keys were already derived and FW is already present in ICCM). This is an important reset time optimization for devices that need to meet the hot reset specification time.
+
+Given warm reset is a pin input to Caliptra, Caliptra may not be idle when a warm reset occurs. If a warm reset occurs while Caliptra ROM, FMC, or RT initialization code is executing, Caliptra may be inoperable until a subsequent cold reset. If a warm reset occurs while Caliptra runtime is servicing a request, Caliptra shall remain operable but may refuse to wield production assets for subsequent requests.
 
 **Note:** Cold reset flow is not explicitly mentioned but it would look like cold boot flow as Caliptra IP has no state through a cold reset.
 
@@ -1222,48 +1238,12 @@ The PAUSER field of the APB interface will be used to encode device attributes f
 
 ### Mailbox Commands
 
-\[\*\] denotes commands that are implemented in ROM; all others are implemented only in mutable firmware. Note that once Caliptra firmware is executing, firmware may provide alternate implementations of the noted commands.
+The Caliptra mailbox commands are specified in the runtime firmware specification: https://github.com/chipsalliance/caliptra-sw/blob/main/runtime/README.md#maibox-commands
 
-*Table 12: Caliptra Mailbox Commands*
 
-<table>
-<thead>
-  <tr>
-    <th>Command Name</th>
-    <th>Encoding</th>
-    <th>Description</th>
-  </tr>
-</thead>
-<tbody>
-  <tr>
-    <td>CALIPTRA_FW_LOAD</td>
-    <td><pre>Command: 0x4657_4C44 ("FWLD")<br><br>Input:<br>{<br>  data: u8[..]<br>}</pre></td>
-    <td>Caliptra FMC+FW image supplied from the external entity over the mailbox interface.<br><br>FMC is validated in-place before being copied to ICCM; app firmware is left in the mailbox for FMC to validate and then copy to ICCM before locking ICCM</td>
-  </tr>
-  <tr>
-    <td>DIAG_STATUS*<br></td>
-    <td><pre>Command: 0x4449_4147 ("DIAG")<br><br>Output: <br>{ <br>  flags: u64 <br>  caliptra_pubkey_hash_word0: u32,<br>  owner_pubkey_hash_word0: u32,<br>  rom_hash_word0: u32,<br>  fmc_hash_word0: u32,<br>  fw_hash_word0: u32<br>}</pre> </td>
-    <td>Returns status flags and debug info fw_hash_word0 refers to currently-running firmware.</td>
-  </tr>
-  <tr>
-    <td>SHA384_HASH*</td>
-    <td><pre>Command: 0x4841_5348 ("HASH")<br><br>Input:<br>{<br><br>  flags: u32,<br>  data_len: u32,<br>  data: u8[data_len]<br>}<br>FLAG_START = (1 &lt;&lt; 0)<br>FLAG_END = (1 &lt;&lt; 1)<br>Output (if FLAG_END)<br>{<br>  data: u8[48]<br>}<br><br><br>Output (if !FLAG_END)<br>{<br>}</pre></td>
-    <td>Starts or extends or completes a hash. TODO: parameter decides which.<br>TODO: state machine language.<br>TODO: Do we care about hashing values that have a non-multiple-of-8-bit length?</td>
-  </tr>
-  <tr>
-    <td>ECDSA384_SIGNATURE_VERIFY</td>
-    <td><pre>Command: 0x5349_4756 ("SIGV")<br><br>Input:<br>{<br>  data: u8[48],<br>  pub_key_x: u8[48],<br><br>  pub_key_y: u8[48],<br>  signature_r: u8[48],<br>  signature_s: u8[48]<br>}<br><br>Output:<br>{<br><br>  result: u32<br>}</pre></td>
-    <td>Generic crypto offload for signature verification.<br><br>Provided content will have hash of the data to be authenticated, ECDSA public key, and the signature.<br>	<br>Returns 0 on success, error code on failure.<br></td>
-  </tr>
-  <tr>
-    <td>STASH_MEASUREMENT</td>
-    <td><pre>Command: 0x4D45_4153 ("MEAS")<br><br>TODO: need to flesh this out. How many measurements does this need to hold? What's up with hitless update? <br>Can we just have this command be used only by SoC ROM to measure SoC FMC, so other command semantics can evolve separately.<br><br>Input:<br>{					<br>  metadata: u8[4],<br>  measurement: u8[48]<br>}<br><br>Output:<br><br>{<br>}<br></pre></td>
-    <td>Invokes a DPE command.<br>Input `data` is a DPE command structure as defined by the <a href="https://github.com/TrustedComputingGroup/Server-Internal/blob/main/dpe-irot-profile/dpe-irot-profile-latest.pdf">[DPE iRoT profile](https://github.com/TrustedComputingGroup/Server-Internal/blob/main/dpe-irot-profile/dpe-irot-profile-latest.pdf)</a>.<br>Output `data` is a DPE response structure as defined by the <a href="https://github.com/TrustedComputingGroup/Server-Internal/blob/main/dpe-irot-profile/dpe-irot-profile-latest.pdf">[DPE iRoT profile](https://github.com/TrustedComputingGroup/Server-Internal/blob/main/dpe-irot-profile/dpe-irot-profile-latest.pdf)</a>.</td>
-  </tr>
-</tbody>
-</table>
+## Caliptra firmware image format
 
-## Caliptra firmware image format TODO
+The Caliptra firmware image format is specified in the ROM specification: https://github.com/chipsalliance/caliptra-sw/blob/main/rom/dev/README.md#8-firmware-image-bundle
 
 ### Hash Calculation HW API
 
@@ -1280,8 +1260,8 @@ Caliptra provides a HW API to do a SHA384 hash calculation. The SoC can access t
 1. SOC will drive the security state indicating that its a debug flow. Refer to “Caliptra Security States” for encodings.
 2. SOC (using a GPIO pin or SOC ROM) will drive BootFSMBrk (this is also used for debug cases). This can be driven at any time before cptra\_rst\_b is deasserted.
 3. SOC will follow the boot flow as defined in Caliptra IP HW boot flow to assert cptra\_pwrgood and deassert cptra\_rst\_b, followed by writing to the fuse registers.
-4. HVM through JTAG or using Caliptra SOC interface writes to “CPTRA\_DBG\_MANUF\_SERVICE\_REG” requesting for appropriate debug service (refer to the ROM/FW spec for bit definitions)
-5. HVM through JTAG can also inject uController TAP commands at this point following the [Veer Spec](https://github.com/chipsalliance/Cores-VeeR-EL2)
+4. HVM through JTAG or using Caliptra SOC interface writes to “CPTRA\_DBG\_MANUF\_SERVICE\_REG” requesting for appropriate debug service (refer to the ROM/FW specification for bit definitions)
+5. HVM through JTAG can also inject uController TAP commands at this point following the [Veer specification](https://github.com/chipsalliance/Cores-VeeR-EL2)
 6. HVM through JTAG or using Caliptra SOC interface writes to “CPTRA\_BOOTFSM\_GO” to allow Caliptra’s internal BootFSM to continue to bring up uController out of reset
 7. uController will execute the appropriate debug service
 8. Specific SOC interface registers (MBOX\_DLEN, MBOX\_DOUT, MBOX\_STATUS, CPTRA\_BOOT\_STATUS, CPTRA\_HW\_ERRROR\_ENC, CPTRA\_FW\_ERRROR\_ENC, BOOTFSM\_GO, CPTRA\_DBG\_MANUF\_SERVICE\_REG) are accessible over JTAG interface in debug (or manufacturing mode). Following are the JTAG register addresses for these registers
@@ -1293,7 +1273,7 @@ Caliptra provides a HW API to do a SHA384 hash calculation. The SoC can access t
 	6. DMI\_REG\_CPTRA\_FW\_ERROR\_ENC = 7'h55; (Read-only)
 	7. DMI\_REG\_CPTRA\_DBG\_MANUF\_SERVICE\_REG = 7'h60; (Read-Write)
 	8. DMI\_REG\_BOOTFSM\_GO = 7'h61; (Read-Write)
-	9. Note: These are injected as TAP register read/write commands as defined in VeeR spec
+	9. Note: These are injected as TAP register read/write commands as defined in VeeR specification
 
 Few notes:
 
@@ -1305,7 +1285,7 @@ Few notes:
 
 ### Architectural Registers
 
-These registers are accessible over APB to be read according to the register access permissions. **TODO: Additional pointer to HTML here,**
+These registers are accessible over APB to be read according to the register access permissions. The register reference manual is available at https://ereg.caliptra.org
 
 ### Fuse Requirements
 
@@ -1334,8 +1314,8 @@ The following table describes a Calpitra RTM’s Fuse map:
 | FMC KEY MANIFEST SVN            | 32              | ROM FMC RUNTIME | In-Field Programmable                           | FMC security version number. |
 | RUNTIME SVN                     | 128             | ROM FMC RUNTIME | In-Field Programmable                           | Runtime Firmware security version number. |
 | ANTI-ROLLBACK DISABLE           | 1               | ROM FMC RUNTIME | In-Field Programmable                           | <p>Disables Anti-rollback support from Caliptra.</p><p>(for example if a Platform RoT is managing FW storage and anti-rollback protection external to the SoC)</p> |
-| IDEVID CERT IDEVID ATTR.        | 768             | ROM FMC RUNTIME | SOC Manufacturing                               | <p>Manufacturer IEEE IDEVID Certificate Generation Attributes.</p><p>Please refer to ROM spec for more details</p> |
-| IDEVID MANUF HSM IDENTIFIER     | 128             | ROM FMC RUNTIME |                                                 | <p>Manufacturer IDEVID Manufacturer’s HSM identifier (this is used to find the certificate chain from the boot media)</p><p>Please refer to ROM spec for more details</p> |
+| IDEVID CERT IDEVID ATTR.        | 768             | ROM FMC RUNTIME | SOC Manufacturing                               | <p>Manufacturer IEEE IDEVID Certificate Generation Attributes.</p><p>Refer to ROM specification for more details</p> |
+| IDEVID MANUF HSM IDENTIFIER     | 128             | ROM FMC RUNTIME |                                                 | <p>Manufacturer IDEVID Manufacturer’s HSM identifier (this is used to find the certificate chain from the boot media)</p><p>Refer to ROM specification for more details</p> |
 | Life Cycle Fuses                | 2               | ROM FMC RUNTIME | SOC Manufacturing                               | <p>**Caliptra Boot Media Integrated mode usage only**. SOCs that build with a Boot Media Dependent profile don’t have to account for these fuses.</p><p>‘00 - Unprovisioned or Manufacturing</p><p>‘01 - Production ‘10 - UNDEF</p><p>‘11 - End Of Life</p><p></p><p>**Reset:** Can only be reset on powergood</p> |
 | LMS VERIFY                      | 1               | ROM             | In-Field Programmable                           | <p>0 - Verify Caliptra firmware images with ECDSA-only</p><p>1 - Verify Caliptra firmware images with both ECDSA and LMS</p>
 | LMS REVOCATION                  | 32              | ROM             | In-Field Programmable                           | Bits for revoking LMS public keys in the key manifest
@@ -1361,21 +1341,27 @@ This section describes Caliptra error reporting and handling.
 
 | | Fatal Errors | Non-fatal Errors |
 | :- | - | - |
-| HW | <p>- ICCM, DCCM SRAM ECC</p><p>- Second WD timer expiry (First one triggers an NMI to FW to correct the issue and clear the interrupt status bit. If the WD expires again, then it gets escalated to FATAL error</p> | <p>- Mailbox SRAM ECC (except initial FW load)</p><p>- Mailbox incorrect protocol/commands</p><p>- Crypto processing errors</p><p> - FW requesting wrong key slot (eg. PCR key slot)</p><p>- Outside the AHB-lite decoding range access</p> |
-| FW | <p>- Boot-time FW authentication failures</p><p>- FW triggered FATAL errors. Examples: ICCM/DCCM misaligned access (potentially in the except subroutine); AHB access hangs that is triggered through WD timer expiry; stack overflow etc. Refer to the table below</p> | <p>- Mailbox API failures</p><p>- First WD timer expiry</p> |
+| HW | <p>- ICCM, DCCM SRAM ECC</p><p>- Second WD timer expiry (First one triggers an NMI to FW to correct the issue and clear the interrupt status bit. If the WD expires again, then it gets escalated to FATAL error</p> | <p>- Mailbox SRAM ECC (except initial FW load)</p><p>- Mailbox incorrect protocol/commands. E.g. Incorrect access ordering; access without Lock.</p> |
+| FW | <p>- Boot-time FW authentication failures</p><p>- FW triggered FATAL errors. Examples: ICCM/DCCM misaligned access (potentially in the except subroutine); AHB access hangs that is triggered through WD timer expiry; AHB access outside the decoding range; stack overflow etc. Refer to the table below</p> | <p>- Mailbox API failures</p><p>- First WD timer expiry</p><p>- Crypto processing errors</p> |
 
 **Fatal errors**
 
-- Fatal errors will log the FATAL ERROR reasons into an arch register that is RW from the external world. This register must be sticky (as in reset is on powergood)
-- Caliptra will signal this using a CALIPTRA\_FATAL\_ERROR wire
-	- SOCs must hook this into their SOC error handling logic
-- When a fatal error occurs, all assets (UDS fuses, DEOBF\_KEK, Key Slots etc.)  are cleared. Please note that UDS\_FUSE, DEOBF\_KEK may have already been cleared depending on when the fatal error happened.
+- Fatal errors will log the FATAL ERROR reasons into an arch register that is RW from the external world. This register must be sticky (as in reset is on powergood).
+- This register may be cleared at any time via register write (W1C).
+- Caliptra will signal this using a cptra\_error\_fatal wire.
+    - SoCs should connect this into their SoC error handling logic. Upon detection of a FATAL ERROR in Caliptra, SoC shall treat any outstanding commands with Caliptra as failed, and SoC may recover by performing a Caliptra reset using the signal `cptra_rst_b`.
+    - This signal is used to prevent forward progress of the boot process if measurement submission to Caliptra fails. If SoC detects a Caliptra fatal error while the SoC is in steady state, then there is no obligation for the SoC to immediately address that error. If rebooting the SoC for such failures is deemed unacceptable to uptime, the SoC should implement the ability to trigger a Caliptra Warm Reset independently of the SoC, and may use this mechanism to recover.
+    - Error Mask registers (writable only by Caliptra uC) may be used to prevent error signal assertion per-event. Mask registers only impact interrupts when set prior to the error occurrence.
+    - cptra\_error\_fatal will remain asserted until Caliptra is reset. Note that, although the HW FATAL ERROR register fields may be cleared at any time, a reset is still required to clear the interrupt.
+- When a fatal error occurs, all assets (UDS fuses, DEOBF\_KEK, Key Slots etc.) are cleared. Note that UDS\_FUSE, DEOBF\_KEK may have already been cleared depending on when the fatal error happened.
 
 **Non-Fatal errors**
 
-- Non-Fatal errors will log the NON-FATAL ERROR reasons into an arch register that is RW from the external world. This register must be sticky (as in reset is on powergood)
-- Caliptra will signal this using a CALIPTRA\_NON\_FATAL\_ERROR wire
-- Optional for SOCs to include this signal in their logic.
+- Non-Fatal errors will log the NON-FATAL ERROR reasons into an arch register that is RW from the external world. This register must be sticky (as in reset is on powergood).
+- This register may be cleared at any time via register write (W1C).
+- Caliptra will signal this using a cptra\_error\_non\_fatal wire.
+- Caliptra reset via `cptra_rst_b` or a write to clear the NON-FATAL ERROR register will cause the interrupt to deassert.
+- Optional for SoCs to include this signal in their logic.
 
 **FW Errors**
 
